@@ -18,6 +18,8 @@ namespace ConsignedCredit.Domain.Entities
 
         public Proponent Proponent { get; private set; }
 
+        public Simulation Simulation { get; private set; }
+
         public ProposalStatus Status { get; private set; }
 
         public DateTime CreatedAt { get; private set; }
@@ -27,7 +29,9 @@ namespace ConsignedCredit.Domain.Entities
         public Proposal(
             Guid agentId,
             Guid storeId,
-            Proponent proponent)
+            Proponent proponent,
+            Simulation simulation,
+            DateTime? createdAt = null)
         {
             if (agentId == Guid.Empty)
                 throw new DomainException("Agent is required.");
@@ -38,12 +42,31 @@ namespace ConsignedCredit.Domain.Entities
             Proponent = proponent
                 ?? throw new DomainException("Proponent is required.");
 
+            Simulation = simulation
+                ?? throw new DomainException("Simulation is required.");
+
             Id = Guid.NewGuid();
             AgentId = agentId;
             StoreId = storeId;
 
+            CreatedAt = createdAt ?? DateTime.UtcNow;
+
+            ValidateMaximumAge();
+
             Status = ProposalStatus.Pending;
-            CreatedAt = DateTime.UtcNow;
+        }
+
+        private void ValidateMaximumAge()
+        {
+            var lastInstallmentDate =
+                CreatedAt.AddMonths(Simulation.Installments);
+
+            var eightyBirthday =
+                Proponent.BirthDate.AddYears(80);
+
+            if (DateOnly.FromDateTime(lastInstallmentDate) > eightyBirthday)
+                throw new DomainException(
+                    "Last installment cannot exceed proponent age of 80.");
         }
     }
 }

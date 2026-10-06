@@ -1,11 +1,12 @@
 ﻿using ConsignedCredit.Domain.Exceptions;
+using ConsignedCredit.Domain.ValueObjects;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ConsignedCredit.Domain.ValueObjects
+namespace ConsignedCredit.Domain.Entities
 {
     public sealed class Proponent
     {
