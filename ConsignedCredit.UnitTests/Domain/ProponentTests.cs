@@ -1,4 +1,5 @@
-﻿using ConsignedCredit.Domain.Exceptions;
+﻿using ConsignedCredit.Domain.Entities;
+using ConsignedCredit.Domain.Exceptions;
 using ConsignedCredit.Domain.ValueObjects;
 using System;
 using System.Collections.Generic;
