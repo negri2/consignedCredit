@@ -1,5 +1,6 @@
 ﻿using ConsignedCredit.Application.Abstractions.Persistence;
 using ConsignedCredit.Domain.Entities;
+using ConsignedCredit.Infrastructure.Messaging.Outbox;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -20,6 +21,7 @@ namespace ConsignedCredit.Infrastructure.Persistence
 
         public DbSet<Proposal> Proposals => Set<Proposal>();
         public DbSet<Proponent> Proponents => Set<Proponent>();
+        public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

@@ -1,7 +1,9 @@
-﻿using ConsignedCredit.Application.Abstractions.Persistence;
+﻿using ConsignedCredit.Application.Abstractions.Messaging;
+using ConsignedCredit.Application.Abstractions.Persistence;
 using ConsignedCredit.Application.Abstractions.Repositories;
 using ConsignedCredit.Application.Abstractions.Services;
 using ConsignedCredit.Application.Exceptions;
+using ConsignedCredit.Application.Proposals.Events;
 using ConsignedCredit.Domain.Entities;
 using ConsignedCredit.Domain.Exceptions;
 using ConsignedCredit.Domain.ValueObjects;
@@ -20,19 +22,22 @@ namespace ConsignedCredit.Application.Proposals.Create
         private readonly IAgentService _agentService;
         private readonly IFraudCheckService _fraudCheckService;
         private readonly IUnitOfWork _unitOfWork;
+        private readonly IOutbox _outbox;
 
         public CreateProposalUseCase(
             IProposalRepository proposalRepository,
             IProponentRepository proponentRepository,
             IAgentService agentService,
             IFraudCheckService fraudCheckService,
-            IUnitOfWork unitOfWork)
+            IUnitOfWork unitOfWork,
+            IOutbox outbox)
         {
             _proposalRepository = proposalRepository;
             _proponentRepository = proponentRepository;
             _agentService = agentService;
             _fraudCheckService = fraudCheckService;
             _unitOfWork = unitOfWork;
+            _outbox = outbox;
         }
 
         public async Task<Guid> ExecuteAsync(
@@ -113,6 +118,10 @@ namespace ConsignedCredit.Application.Proposals.Create
 
             await _proposalRepository.AddAsync(
                 proposal,
+                cancellationToken);
+
+            await _outbox.AddAsync(
+                new ProposalCreatedEvent(proposal.Id),
                 cancellationToken);
 
             await _unitOfWork.SaveChangesAsync(

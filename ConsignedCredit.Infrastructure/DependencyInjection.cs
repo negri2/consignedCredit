@@ -1,7 +1,9 @@
-﻿using ConsignedCredit.Application.Abstractions.Persistence;
+﻿using ConsignedCredit.Application.Abstractions.Messaging;
+using ConsignedCredit.Application.Abstractions.Persistence;
 using ConsignedCredit.Application.Abstractions.Repositories;
 using ConsignedCredit.Application.Abstractions.Services;
 using ConsignedCredit.Infrastructure.ExternalServices;
+using ConsignedCredit.Infrastructure.Messaging.Outbox;
 using ConsignedCredit.Infrastructure.Persistence;
 using ConsignedCredit.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -33,6 +35,8 @@ namespace ConsignedCredit.Infrastructure
 
             services.AddScoped<IUnitOfWork>(provider =>
                 provider.GetRequiredService<ConsignedCreditDbContext>());
+
+            services.AddScoped<IOutbox, Outbox>();
 
             return services;
         }

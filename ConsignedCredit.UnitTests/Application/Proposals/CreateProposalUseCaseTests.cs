@@ -1,8 +1,10 @@
-﻿using ConsignedCredit.Application.Abstractions.Persistence;
+﻿using ConsignedCredit.Application.Abstractions.Messaging;
+using ConsignedCredit.Application.Abstractions.Persistence;
 using ConsignedCredit.Application.Abstractions.Repositories;
 using ConsignedCredit.Application.Abstractions.Services;
 using ConsignedCredit.Application.Exceptions;
 using ConsignedCredit.Application.Proposals.Create;
+using ConsignedCredit.Application.Proposals.Events;
 using ConsignedCredit.Domain.Entities;
 using ConsignedCredit.Domain.ValueObjects;
 using Moq;
@@ -22,6 +24,7 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
         private readonly Mock<IAgentService> _agentService;
         private readonly Mock<IFraudCheckService> _fraudCheckService;
         private readonly Mock<IUnitOfWork> _unitOfWork;
+        private readonly Mock<IOutbox> _outbox;
 
         private readonly CreateProposalUseCase _useCase;
 
@@ -32,13 +35,15 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
             _agentService = new Mock<IAgentService>();
             _fraudCheckService = new Mock<IFraudCheckService>();
             _unitOfWork = new Mock<IUnitOfWork>();
+            _outbox = new Mock<IOutbox>();
 
             _useCase = new CreateProposalUseCase(
                 _proposalRepository.Object,
                 _proponentRepository.Object,
                 _agentService.Object,
                 _fraudCheckService.Object,
-                _unitOfWork.Object);
+                _unitOfWork.Object,
+                _outbox.Object);
         }
 
         [Fact]
@@ -90,8 +95,21 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
             Assert.Equal(request.RequestedAmount, savedProposal.Simulation.RequestedAmount);
             Assert.Equal(request.Installments, savedProposal.Simulation.Installments);
 
+            _proponentRepository.Verify(
+                x => x.AddAsync(
+                    It.Is<Proponent>(p => p.Cpf == request.Cpf),
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+
             _unitOfWork.Verify(
                 x => x.SaveChangesAsync(
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+
+            _outbox.Verify(
+                x => x.AddAsync(
+                    It.Is<ProposalCreatedEvent>(
+                        e => e.ProposalId == proposalId),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
         }
@@ -114,6 +132,12 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
 
             _unitOfWork.Verify(
                 x => x.SaveChangesAsync(
+                    It.IsAny<CancellationToken>()),
+                Times.Never);
+
+            _outbox.Verify(
+                x => x.AddAsync(
+                    It.IsAny<ProposalCreatedEvent>(),
                     It.IsAny<CancellationToken>()),
                 Times.Never);
         }
@@ -145,6 +169,12 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
 
             _unitOfWork.Verify(
                 x => x.SaveChangesAsync(
+                    It.IsAny<CancellationToken>()),
+                Times.Never);
+
+            _outbox.Verify(
+                x => x.AddAsync(
+                    It.IsAny<ProposalCreatedEvent>(),
                     It.IsAny<CancellationToken>()),
                 Times.Never);
         }
@@ -181,6 +211,12 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
 
             _unitOfWork.Verify(
                 x => x.SaveChangesAsync(
+                    It.IsAny<CancellationToken>()),
+                Times.Never);
+
+            _outbox.Verify(
+                x => x.AddAsync(
+                    It.IsAny<ProposalCreatedEvent>(),
                     It.IsAny<CancellationToken>()),
                 Times.Never);
         }
@@ -230,7 +266,7 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(existingProponent);
 
-            await _useCase.ExecuteAsync(request);
+            var proposalId = await _useCase.ExecuteAsync(request);
 
             // Não cria outro proponente
             _proponentRepository.Verify(
@@ -258,6 +294,13 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
             // Persiste tudo
             _unitOfWork.Verify(
                 x => x.SaveChangesAsync(
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+
+            _outbox.Verify(
+                x => x.AddAsync(
+                    It.Is<ProposalCreatedEvent>(
+                        e => e.ProposalId == proposalId),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
         }
