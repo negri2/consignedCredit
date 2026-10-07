@@ -23,6 +23,8 @@ namespace ConsignedCredit.Application.Proposals.Create
         private readonly IFraudCheckService _fraudCheckService;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IOutbox _outbox;
+        private readonly IStateLoanRestrictionRepository _stateLoanRestrictionRepository;
+
 
         public CreateProposalUseCase(
             IProposalRepository proposalRepository,
@@ -30,7 +32,8 @@ namespace ConsignedCredit.Application.Proposals.Create
             IAgentService agentService,
             IFraudCheckService fraudCheckService,
             IUnitOfWork unitOfWork,
-            IOutbox outbox)
+            IOutbox outbox,
+            IStateLoanRestrictionRepository stateLoanRestrictionRepository)
         {
             _proposalRepository = proposalRepository;
             _proponentRepository = proponentRepository;
@@ -38,6 +41,7 @@ namespace ConsignedCredit.Application.Proposals.Create
             _fraudCheckService = fraudCheckService;
             _unitOfWork = unitOfWork;
             _outbox = outbox;
+            _stateLoanRestrictionRepository = stateLoanRestrictionRepository;
         }
 
         public async Task<Guid> ExecuteAsync(
@@ -68,6 +72,18 @@ namespace ConsignedCredit.Application.Proposals.Create
             if (isFraudulent)
                 throw new BusinessRuleException(
                     "Proponent CPF is blocked by fraud check.");
+
+            var stateRestriction =
+               await _stateLoanRestrictionRepository.GetByStateAsync(
+           request.State.ToUpperInvariant(),
+           cancellationToken);
+
+            if (stateRestriction is not null &&
+                request.RequestedAmount > stateRestriction.MaximumAmount)
+            {
+                throw new BusinessRuleException(
+                    $"Requested amount exceeds the limit for state {request.State}.");
+            }
 
             var address = new Address(
                 request.Street,

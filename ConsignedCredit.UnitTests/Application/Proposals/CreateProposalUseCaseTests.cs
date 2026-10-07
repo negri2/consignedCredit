@@ -25,11 +25,19 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
         private readonly Mock<IFraudCheckService> _fraudCheckService;
         private readonly Mock<IUnitOfWork> _unitOfWork;
         private readonly Mock<IOutbox> _outbox;
+        private readonly Mock<IStateLoanRestrictionRepository>
+            _stateLoanRestrictionRepository = new();
 
         private readonly CreateProposalUseCase _useCase;
 
         public CreateProposalUseCaseTests()
         {
+            _stateLoanRestrictionRepository
+                .Setup(x => x.GetByStateAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync((StateLoanRestriction?)null);
+
             _proposalRepository = new Mock<IProposalRepository>();
             _proponentRepository = new Mock<IProponentRepository>();
             _agentService = new Mock<IAgentService>();
@@ -43,7 +51,8 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
                 _agentService.Object,
                 _fraudCheckService.Object,
                 _unitOfWork.Object,
-                _outbox.Object);
+                _outbox.Object,
+                _stateLoanRestrictionRepository.Object);
         }
 
         [Fact]
@@ -305,6 +314,94 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
                 Times.Once);
         }
 
+        [Fact]
+        public async Task Should_Reject_When_Requested_Amount_Exceeds_State_Limit()
+        {
+            var request = CreateValidRequest();
+
+            SetupValidProposalCreation(request);
+
+            _stateLoanRestrictionRepository
+                .Setup(x => x.GetByStateAsync(
+                    request.State,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(
+                    new StateLoanRestriction(
+                        request.State,
+                        5_000m));
+
+            var exception = await Assert.ThrowsAsync<BusinessRuleException>(
+                () => _useCase.ExecuteAsync(request));
+
+            Assert.Equal(
+                $"Requested amount exceeds the limit for state {request.State}.",
+                exception.Message);
+
+            _proposalRepository.Verify(
+                x => x.AddAsync(
+                    It.IsAny<Proposal>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Never);
+
+            _outbox.Verify(
+                x => x.AddAsync(
+                    It.IsAny<ProposalCreatedEvent>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Never);
+
+            _unitOfWork.Verify(
+                x => x.SaveChangesAsync(
+                    It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task Should_Allow_When_Requested_Amount_Equals_State_Limit()
+        {
+            var request = CreateValidRequest();
+
+            _agentService
+                .Setup(x => x.IsActiveAsync(
+                    request.AgentId,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
+
+            _proposalRepository
+                .Setup(x => x.HasOpenProposalByCpfAsync(
+                    request.Cpf,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(false);
+
+            _fraudCheckService
+                .Setup(x => x.IsFraudulentAsync(
+                    request.Cpf,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(false);
+
+            _proponentRepository
+                .Setup(x => x.GetByCpfAsync(
+                    request.Cpf,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync((Proponent?)null);
+
+            _stateLoanRestrictionRepository
+                .Setup(x => x.GetByStateAsync(
+                    request.State,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(
+                    new StateLoanRestriction(
+                        "RS",
+                        10_000m));
+
+            await _useCase.ExecuteAsync(request);
+
+            _proposalRepository.Verify(
+                x => x.AddAsync(
+                    It.IsAny<Proposal>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+
         private static CreateProposalRequest CreateValidRequest()
         {
             return new CreateProposalRequest(
@@ -323,6 +420,33 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
                 ZipCode: "95000-000",
                 RequestedAmount: 10_000m,
                 Installments: 48);
+        }
+
+        private void SetupValidProposalCreation(CreateProposalRequest request)
+        {
+            _agentService
+                .Setup(x => x.IsActiveAsync(
+                    request.AgentId,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
+
+            _proposalRepository
+                .Setup(x => x.HasOpenProposalByCpfAsync(
+                    request.Cpf,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(false);
+
+            _fraudCheckService
+                .Setup(x => x.IsFraudulentAsync(
+                    request.Cpf,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(false);
+
+            _proponentRepository
+                .Setup(x => x.GetByCpfAsync(
+                    request.Cpf,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync((Proponent?)null);
         }
     }
 }

@@ -22,6 +22,8 @@ namespace ConsignedCredit.Infrastructure.Persistence
         public DbSet<Proposal> Proposals => Set<Proposal>();
         public DbSet<Proponent> Proponents => Set<Proponent>();
         public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+        public DbSet<StateLoanRestriction> StateLoanRestrictions =>
+            Set<StateLoanRestriction>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

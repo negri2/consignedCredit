@@ -30,6 +30,7 @@ namespace ConsignedCredit.Infrastructure
 
             services.AddScoped<IProposalRepository, ProposalRepository>();
             services.AddScoped<IProponentRepository, ProponentRepository>();
+            services.AddScoped<IStateLoanRestrictionRepository, StateLoanRestrictionRepository>();
 
             services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<ConsignedCreditDbContext>());
 
