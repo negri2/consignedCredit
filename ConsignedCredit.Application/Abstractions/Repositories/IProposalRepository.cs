@@ -9,6 +9,10 @@ namespace ConsignedCredit.Application.Abstractions.Repositories
 {
     public interface IProposalRepository
     {
+        Task<Proposal?> GetByIdAsync(
+            Guid id,
+            CancellationToken cancellationToken = default);
+
         Task<bool> HasOpenProposalByCpfAsync(
             string cpf,
             CancellationToken cancellationToken = default);

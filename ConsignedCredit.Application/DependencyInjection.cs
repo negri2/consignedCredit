@@ -1,4 +1,5 @@
 ﻿using ConsignedCredit.Application.Proposals.Create;
+using ConsignedCredit.Application.Proposals.Process;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
@@ -14,6 +15,7 @@ namespace ConsignedCredit.Application
             this IServiceCollection services)
         {
             services.AddScoped<CreateProposalUseCase>();
+            services.AddScoped<ProcessProposalUseCase>();
 
             return services;
         }

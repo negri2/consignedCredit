@@ -40,6 +40,13 @@ namespace ConsignedCredit.Infrastructure
             services.AddSingleton<IMessagePublisher, RabbitMqMessagePublisher>();
 
             services.AddScoped<IOutbox, Outbox>();
+
+            return services;
+        }
+
+        public static IServiceCollection AddOutboxProcessor(
+            this IServiceCollection services)
+        {
             services.AddHostedService<OutboxProcessor>();
 
             return services;

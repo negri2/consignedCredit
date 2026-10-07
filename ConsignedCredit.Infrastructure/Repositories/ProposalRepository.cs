@@ -20,6 +20,17 @@ namespace ConsignedCredit.Infrastructure.Repositories
             _context = context;
         }
 
+        public async Task<Proposal?> GetByIdAsync(
+            Guid id,
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.Proposals
+                .Include(x => x.Proponent)
+                .FirstOrDefaultAsync(
+                    x => x.Id == id,
+                    cancellationToken);
+        }
+
         public async Task<bool> HasOpenProposalByCpfAsync(
             string cpf,
             CancellationToken cancellationToken = default)
