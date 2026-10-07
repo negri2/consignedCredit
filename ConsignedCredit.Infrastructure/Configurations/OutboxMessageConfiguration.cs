@@ -19,6 +19,8 @@ namespace ConsignedCredit.Infrastructure.Configurations
 
             builder.HasKey(x => x.Id);
 
+            builder.HasIndex(x => x.ProcessedAt);
+
             builder.Property(x => x.Type)
                 .HasMaxLength(200)
                 .IsRequired();

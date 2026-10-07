@@ -4,6 +4,7 @@ using ConsignedCredit.Application.Abstractions.Repositories;
 using ConsignedCredit.Application.Abstractions.Services;
 using ConsignedCredit.Infrastructure.ExternalServices;
 using ConsignedCredit.Infrastructure.Messaging.Outbox;
+using ConsignedCredit.Infrastructure.Messaging.RabbitMq;
 using ConsignedCredit.Infrastructure.Persistence;
 using ConsignedCredit.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -33,10 +34,13 @@ namespace ConsignedCredit.Infrastructure
             services.AddScoped<IAgentService, AgentService>();
             services.AddScoped<IFraudCheckService, FraudCheckService>();
 
-            services.AddScoped<IUnitOfWork>(provider =>
-                provider.GetRequiredService<ConsignedCreditDbContext>());
+            services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<ConsignedCreditDbContext>());
+
+            services.Configure<RabbitMqOptions>(configuration.GetSection(RabbitMqOptions.SectionName));
+            services.AddSingleton<IMessagePublisher, RabbitMqMessagePublisher>();
 
             services.AddScoped<IOutbox, Outbox>();
+            services.AddHostedService<OutboxProcessor>();
 
             return services;
         }
