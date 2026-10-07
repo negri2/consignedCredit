@@ -14,6 +14,7 @@ public sealed class Worker : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly RabbitMqOptions _options;
     private readonly ILogger<Worker> _logger;
+    private const string RetryHeader = "x-retry-count";
 
     private IConnection? _connection;
     private IChannel? _channel;
@@ -45,12 +46,7 @@ public sealed class Worker : BackgroundService
         _channel = await _connection.CreateChannelAsync(
             cancellationToken: stoppingToken);
 
-        await _channel.QueueDeclareAsync(
-            queue: _options.Queue,
-            durable: true,
-            exclusive: false,
-            autoDelete: false,
-            cancellationToken: stoppingToken);
+        await ConfigureQueuesAsync(stoppingToken);
 
         await _channel.BasicQosAsync(
             prefetchSize: 0,
@@ -111,12 +107,172 @@ public sealed class Worker : BackgroundService
                 exception,
                 "Error processing RabbitMQ message.");
 
-            await _channel!.BasicNackAsync(
-                args.DeliveryTag,
-                multiple: false,
-                requeue: true,
+            await HandleFailedMessageAsync(
+                args,
                 cancellationToken);
         }
+    }
+
+    private async Task ConfigureQueuesAsync(
+        CancellationToken cancellationToken)
+    {
+        await _channel!.ExchangeDeclareAsync(
+            exchange: _options.Exchange,
+            type: ExchangeType.Direct,
+            durable: true,
+            autoDelete: false,
+            cancellationToken: cancellationToken);
+
+        // Main queue
+        await _channel!.QueueDeclareAsync(
+            queue: _options.Queue,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            cancellationToken: cancellationToken);
+
+        await _channel.QueueBindAsync(
+            queue: _options.Queue,
+            exchange: _options.Exchange,
+            routingKey: _options.RoutingKey,
+            cancellationToken: cancellationToken);
+
+        // Retry queue:
+        // after the TTL expires, RabbitMQ sends the message
+        // back to the main exchange/routing key.
+        var retryArguments = new Dictionary<string, object?>
+        {
+            ["x-message-ttl"] = _options.RetryDelayMilliseconds,
+            ["x-dead-letter-exchange"] = _options.Exchange,
+            ["x-dead-letter-routing-key"] = _options.RoutingKey
+        };
+
+        await _channel.QueueDeclareAsync(
+            queue: _options.RetryQueue,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            arguments: retryArguments,
+            cancellationToken: cancellationToken);
+
+        // Messages that exceeded the retry limit stay here
+        // for manual inspection/reprocessing.
+        await _channel.QueueDeclareAsync(
+            queue: _options.DeadLetterQueue,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            cancellationToken: cancellationToken);
+    }
+
+   
+
+    private async Task HandleFailedMessageAsync(
+        BasicDeliverEventArgs args,
+        CancellationToken cancellationToken)
+    {
+        var retryCount = GetRetryCount(args.BasicProperties);
+
+        if (retryCount < _options.MaxRetries)
+        {
+            await PublishToRetryQueueAsync(
+                args,
+                retryCount + 1,
+                cancellationToken);
+
+            _logger.LogWarning(
+                "Message {DeliveryTag} sent to retry queue. Retry {RetryCount}/{MaxRetries}.",
+                args.DeliveryTag,
+                retryCount + 1,
+                _options.MaxRetries);
+        }
+        else
+        {
+            await PublishToDeadLetterQueueAsync(
+                args,
+                cancellationToken);
+
+            _logger.LogError(
+                "Message {DeliveryTag} exceeded retry limit and was sent to DLQ.",
+                args.DeliveryTag);
+        }
+
+        await _channel!.BasicAckAsync(
+            args.DeliveryTag,
+            multiple: false,
+            cancellationToken);
+    }
+
+    private async Task PublishToRetryQueueAsync(
+        BasicDeliverEventArgs args,
+        int retryCount,
+        CancellationToken cancellationToken)
+    {
+        var properties = new BasicProperties
+        {
+            ContentType = args.BasicProperties.ContentType,
+            Type = args.BasicProperties.Type,
+            Persistent = true,
+            Headers = CopyHeaders(args.BasicProperties.Headers)
+        };
+
+        properties.Headers[RetryHeader] = retryCount;
+
+        await _channel!.BasicPublishAsync(
+            exchange: string.Empty,
+            routingKey: _options.RetryQueue,
+            mandatory: true,
+            basicProperties: properties,
+            body: args.Body,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task PublishToDeadLetterQueueAsync(
+        BasicDeliverEventArgs args,
+        CancellationToken cancellationToken)
+    {
+        var properties = new BasicProperties
+        {
+            ContentType = args.BasicProperties.ContentType,
+            Type = args.BasicProperties.Type,
+            Persistent = true,
+            Headers = CopyHeaders(args.BasicProperties.Headers)
+        };
+
+        await _channel!.BasicPublishAsync(
+            exchange: string.Empty,
+            routingKey: _options.DeadLetterQueue,
+            mandatory: true,
+            basicProperties: properties,
+            body: args.Body,
+            cancellationToken: cancellationToken);
+    }
+
+    private static int GetRetryCount(
+       IReadOnlyBasicProperties properties)
+    {
+        if (properties.Headers is null ||
+            !properties.Headers.TryGetValue(
+                RetryHeader,
+                out var value))
+        {
+            return 0;
+        }
+
+        return value switch
+        {
+            int intValue => intValue,
+            long longValue => (int)longValue,
+            _ => 0
+        };
+    }
+
+    private static IDictionary<string, object?> CopyHeaders(
+    IDictionary<string, object?>? headers)
+    {
+        return headers is null
+            ? new Dictionary<string, object?>()
+            : new Dictionary<string, object?>(headers);
     }
 
     public override async Task StopAsync(

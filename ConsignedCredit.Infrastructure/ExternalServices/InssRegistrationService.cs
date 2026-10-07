@@ -17,6 +17,9 @@ namespace ConsignedCredit.Infrastructure.ExternalServices
             await Task.Delay(
                 TimeSpan.FromMilliseconds(200),
                 cancellationToken);
+
+            //throw new InvalidOperationException(
+            //    "Simulated INSS service failure.");
         }
     }
 }

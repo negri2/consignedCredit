@@ -18,5 +18,11 @@ namespace ConsignedCredit.Infrastructure.Messaging.RabbitMq
         public string Exchange { get; set; } = "consigned-credit";
         public string Queue { get; set; } = "proposal-processing";
         public string RoutingKey { get; set; } = "proposal.created";
+
+        public string RetryQueue { get; set; } = "proposal-processing-retry";
+        public string DeadLetterQueue { get; set; } = "proposal-processing-dlq";
+
+        public int RetryDelayMilliseconds { get; set; } = 5000;
+        public int MaxRetries { get; set; } = 3;
     }
 }
