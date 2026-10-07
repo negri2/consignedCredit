@@ -152,6 +152,64 @@ namespace ConsignedCredit.UnitTests.Domain
             Assert.Equal(ProposalStatus.Pending, proposal.Status);
         }
 
+        [Fact]
+        public void Should_Start_Proposal_Processing()
+        {
+            var proposal = CreateValidProposal();
+
+            proposal.StartProcessing();
+
+            Assert.Equal(ProposalStatus.Processing, proposal.Status);
+            Assert.Equal(
+                ProposalProcessingStep.SimulationValidation,
+                proposal.ProcessingStep);
+        }
+
+        [Fact]
+        public void Should_Not_Complete_Payment_When_Not_In_Payment_Step()
+        {
+            var proposal = CreateValidProposal();
+
+            proposal.StartProcessing();
+
+            Assert.Throws<DomainException>(
+                () => proposal.CompletePayment());
+        }
+
+        [Fact]
+        public void Should_Reject_Proposal_During_Processing()
+        {
+            var proposal = CreateValidProposal();
+
+            proposal.StartProcessing();
+            proposal.Reject("Risk score below minimum.");
+
+            Assert.Equal(ProposalStatus.Rejected, proposal.Status);
+            Assert.Equal(
+                "Risk score below minimum.",
+                proposal.RejectionReason);
+        }
+
+        [Fact]
+        public void Should_Complete_Proposal_Processing()
+        {
+            var proposal = CreateValidProposal();
+
+            proposal.StartProcessing();
+
+            proposal.CompleteSimulationValidation();
+            proposal.CompleteRiskAnalysis();
+            proposal.CompleteInssRegistration();
+            proposal.CompleteContractGeneration();
+            proposal.CompleteDigitalSignature();
+            proposal.CompletePayment();
+
+            Assert.Equal(ProposalStatus.Approved, proposal.Status);
+            Assert.Equal(
+                ProposalProcessingStep.Completed,
+                proposal.ProcessingStep);
+        }
+
         private static Proponent CreateValidProponent()
         {
             var address = new Address(
@@ -177,6 +235,21 @@ namespace ConsignedCredit.UnitTests.Domain
                 10_000m,
                 48,
                 proponent.RetirementIncome);
+        }
+
+        private static Proposal CreateValidProposal()
+        {
+            var proponent = CreateValidProponent();
+            var simulation = CreateValidSimulation(proponent);
+
+            var proposal = new Proposal(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                proponent,
+                simulation,
+                new DateTime(2026, 1, 1));
+
+            return proposal;
         }
     }
 }

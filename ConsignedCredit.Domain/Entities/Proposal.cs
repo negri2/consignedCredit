@@ -24,6 +24,9 @@ namespace ConsignedCredit.Domain.Entities
 
         public DateTime CreatedAt { get; private set; }
 
+        public ProposalProcessingStep ProcessingStep { get; private set; }
+        public string? RejectionReason { get; private set; }
+
         private Proposal() { }
 
         public Proposal(
@@ -54,6 +57,7 @@ namespace ConsignedCredit.Domain.Entities
             ValidateMaximumAge();
 
             Status = ProposalStatus.Pending;
+            ProcessingStep = ProposalProcessingStep.None;
         }
 
         private void ValidateMaximumAge()
@@ -67,6 +71,83 @@ namespace ConsignedCredit.Domain.Entities
             if (DateOnly.FromDateTime(lastInstallmentDate) > eightyBirthday)
                 throw new DomainException(
                     "Last installment cannot exceed proponent age of 80.");
+        }
+
+        public void StartProcessing()
+        {
+            if (Status != ProposalStatus.Pending)
+                throw new DomainException(
+                    "Only pending proposals can start processing.");
+
+            Status = ProposalStatus.Processing;
+            ProcessingStep = ProposalProcessingStep.SimulationValidation;
+        }
+
+        public void CompleteSimulationValidation()
+        {
+            EnsureCurrentStep(ProposalProcessingStep.SimulationValidation);
+
+            ProcessingStep = ProposalProcessingStep.RiskAnalysis;
+        }
+
+        public void CompleteRiskAnalysis()
+        {
+            EnsureCurrentStep(ProposalProcessingStep.RiskAnalysis);
+
+            ProcessingStep = ProposalProcessingStep.InssRegistration;
+        }
+
+        public void CompleteInssRegistration()
+        {
+            EnsureCurrentStep(ProposalProcessingStep.InssRegistration);
+
+            ProcessingStep = ProposalProcessingStep.ContractGeneration;
+        }
+
+        public void CompleteContractGeneration()
+        {
+            EnsureCurrentStep(ProposalProcessingStep.ContractGeneration);
+
+            ProcessingStep = ProposalProcessingStep.DigitalSignature;
+        }
+
+        public void CompleteDigitalSignature()
+        {
+            EnsureCurrentStep(ProposalProcessingStep.DigitalSignature);
+
+            ProcessingStep = ProposalProcessingStep.Payment;
+        }
+
+        public void CompletePayment()
+        {
+            EnsureCurrentStep(ProposalProcessingStep.Payment);
+
+            ProcessingStep = ProposalProcessingStep.Completed;
+            Status = ProposalStatus.Approved;
+        }
+
+        public void Reject(string reason)
+        {
+            if (Status != ProposalStatus.Processing)
+                throw new DomainException(
+                    "Only processing proposals can be rejected.");
+
+            if (string.IsNullOrWhiteSpace(reason))
+                throw new DomainException(
+                    "Rejection reason is required.");
+
+            Status = ProposalStatus.Rejected;
+            RejectionReason = reason;
+        }
+
+        private void EnsureCurrentStep(ProposalProcessingStep expectedStep)
+        {
+            if (Status != ProposalStatus.Processing ||
+                ProcessingStep != expectedStep)
+            {
+                throw new DomainException(
+                    $"Proposal is not in the expected processing step: {expectedStep}.");
+            }
         }
     }
 }

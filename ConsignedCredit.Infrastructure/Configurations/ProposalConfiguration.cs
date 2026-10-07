@@ -37,6 +37,14 @@ namespace ConsignedCredit.Infrastructure.Configurations
                 .HasForeignKey("ProponentId")
                 .OnDelete(DeleteBehavior.Restrict);
 
+            builder.Property(x => x.ProcessingStep)
+                .HasConversion<string>()
+                .HasMaxLength(50)
+                .IsRequired();
+
+            builder.Property(x => x.RejectionReason)
+                .HasMaxLength(500);
+
             builder.OwnsOne(x => x.Simulation, simulation =>
             {
                 simulation.Property(x => x.RequestedAmount)
