@@ -31,15 +31,21 @@ namespace ConsignedCredit.Infrastructure
             services.AddScoped<IProposalRepository, ProposalRepository>();
             services.AddScoped<IProponentRepository, ProponentRepository>();
 
-            services.AddScoped<IAgentService, AgentService>();
-            services.AddScoped<IFraudCheckService, FraudCheckService>();
-
             services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<ConsignedCreditDbContext>());
 
             services.Configure<RabbitMqOptions>(configuration.GetSection(RabbitMqOptions.SectionName));
             services.AddSingleton<IMessagePublisher, RabbitMqMessagePublisher>();
 
             services.AddScoped<IOutbox, Outbox>();
+
+            services.AddScoped<IAgentService, AgentService>();
+            services.AddScoped<IFraudCheckService, FraudCheckService>();
+            services.AddScoped<ISimulationValidationService, SimulationValidationService>();
+            services.AddScoped<IRiskAnalysisService, RiskAnalysisService>();
+            services.AddScoped<IInssRegistrationService, InssRegistrationService>();
+            services.AddScoped<IContractGenerationService, ContractGenerationService>();
+            services.AddScoped<IDigitalSignatureService, DigitalSignatureService>();
+            services.AddScoped<IPaymentService, PaymentService>();
 
             return services;
         }
