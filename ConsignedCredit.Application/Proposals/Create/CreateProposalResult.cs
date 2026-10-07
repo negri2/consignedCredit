@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 
 namespace ConsignedCredit.Application.Proposals.Create
 {
-    internal class CreateProposalResult
-    {
-    }
+    public sealed record CreateProposalResult(
+        Guid ProposalId);
 }

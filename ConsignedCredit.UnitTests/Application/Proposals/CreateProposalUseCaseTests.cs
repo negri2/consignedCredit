@@ -92,12 +92,12 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
                 .Callback<Proposal, CancellationToken>(
                     (proposal, _) => savedProposal = proposal);
 
-            var proposalId = await _useCase.ExecuteAsync(request);
+            var proposal = await _useCase.ExecuteAsync(request);
 
-            Assert.NotEqual(Guid.Empty, proposalId);
+            Assert.NotNull(proposal);
 
             Assert.NotNull(savedProposal);
-            Assert.Equal(proposalId, savedProposal.Id);
+            Assert.Equal(proposal.ProposalId, savedProposal.Id);
             Assert.Equal(request.AgentId, savedProposal.AgentId);
             Assert.Equal(request.StoreId, savedProposal.StoreId);
             Assert.Equal(request.Cpf, savedProposal.Proponent.Cpf);
@@ -118,7 +118,7 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
             _outbox.Verify(
                 x => x.AddAsync(
                     It.Is<ProposalCreatedEvent>(
-                        e => e.ProposalId == proposalId),
+                        e => e.ProposalId == proposal.ProposalId),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
         }
@@ -275,7 +275,7 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(existingProponent);
 
-            var proposalId = await _useCase.ExecuteAsync(request);
+            var proposal = await _useCase.ExecuteAsync(request);
 
             // Não cria outro proponente
             _proponentRepository.Verify(
@@ -309,7 +309,7 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
             _outbox.Verify(
                 x => x.AddAsync(
                     It.Is<ProposalCreatedEvent>(
-                        e => e.ProposalId == proposalId),
+                        e => e.ProposalId == proposal.ProposalId),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
         }

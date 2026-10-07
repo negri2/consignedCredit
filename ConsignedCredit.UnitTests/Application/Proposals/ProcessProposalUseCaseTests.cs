@@ -5,6 +5,7 @@ using ConsignedCredit.Application.Proposals.Process;
 using ConsignedCredit.Domain.Entities;
 using ConsignedCredit.Domain.Enums;
 using ConsignedCredit.Domain.ValueObjects;
+using Microsoft.Extensions.Logging;
 using Moq;
 using System;
 using System.Collections.Generic;
@@ -25,6 +26,7 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
         private readonly Mock<IContractGenerationService> _contractGenerationService;
         private readonly Mock<IDigitalSignatureService> _digitalSignatureService;
         private readonly Mock<IPaymentService> _paymentService;
+        private readonly Mock<ILogger<ProcessProposalUseCase>> _logger = new();
 
         private readonly ProcessProposalUseCase _useCase;
 
@@ -48,7 +50,8 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
                 _inssRegistrationService.Object,
                 _contractGenerationService.Object,
                 _digitalSignatureService.Object,
-                _paymentService.Object);
+                _paymentService.Object,
+                _logger.Object);
         }
 
         [Fact]

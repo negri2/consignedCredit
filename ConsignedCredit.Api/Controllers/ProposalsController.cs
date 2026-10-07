@@ -1,5 +1,7 @@
 ﻿using ConsignedCredit.Application.Proposals.Create;
+using ConsignedCredit.Application.Proposals.Get;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ConsignedCredit.Api.Controllers
@@ -14,20 +16,30 @@ namespace ConsignedCredit.Api.Controllers
             [FromServices] CreateProposalUseCase useCase,
             CancellationToken cancellationToken)
         {
-            var proposalId = await useCase.ExecuteAsync(
+            var result = await useCase.ExecuteAsync(
                 request,
                 cancellationToken);
 
             return CreatedAtAction(
                 nameof(GetById),
-                new { id = proposalId },
-                new { id = proposalId });
+                new { id = result.ProposalId },
+                result);
         }
 
         [HttpGet("{id:guid}")]
-        public IActionResult GetById(Guid id)
+        public async Task<IActionResult> GetById(
+            Guid id,
+            [FromServices] GetProposalUseCase useCase,
+            CancellationToken cancellationToken)
         {
-            return Ok();
+            var result = await useCase.ExecuteAsync(
+                id,
+                cancellationToken);
+
+            if (result is null)
+                return NotFound();
+
+            return Ok(result);
         }
     }
 }

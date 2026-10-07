@@ -44,7 +44,7 @@ namespace ConsignedCredit.Application.Proposals.Create
             _stateLoanRestrictionRepository = stateLoanRestrictionRepository;
         }
 
-        public async Task<Guid> ExecuteAsync(
+        public async Task<CreateProposalResult> ExecuteAsync(
             CreateProposalRequest request,
             CancellationToken cancellationToken = default)
         {
@@ -143,7 +143,7 @@ namespace ConsignedCredit.Application.Proposals.Create
             await _unitOfWork.SaveChangesAsync(
                 cancellationToken);
 
-            return proposal.Id;
+            return new CreateProposalResult(proposal.Id);
         }
     }
 }

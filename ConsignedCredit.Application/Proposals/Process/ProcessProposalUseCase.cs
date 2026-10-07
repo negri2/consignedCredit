@@ -2,6 +2,7 @@
 using ConsignedCredit.Application.Abstractions.Repositories;
 using ConsignedCredit.Application.Abstractions.Services;
 using ConsignedCredit.Domain.Enums;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,6 +23,7 @@ namespace ConsignedCredit.Application.Proposals.Process
         private readonly IContractGenerationService _contractGenerationService;
         private readonly IDigitalSignatureService _digitalSignatureService;
         private readonly IPaymentService _paymentService;
+        private readonly ILogger<ProcessProposalUseCase> _logger;
 
         public ProcessProposalUseCase(
             IProposalRepository proposalRepository,
@@ -31,7 +33,8 @@ namespace ConsignedCredit.Application.Proposals.Process
             IInssRegistrationService inssRegistrationService,
             IContractGenerationService contractGenerationService,
             IDigitalSignatureService digitalSignatureService,
-            IPaymentService paymentService)
+            IPaymentService paymentService,
+            ILogger<ProcessProposalUseCase> logger)
         {
             _proposalRepository = proposalRepository;
             _unitOfWork = unitOfWork;
@@ -41,27 +44,49 @@ namespace ConsignedCredit.Application.Proposals.Process
             _contractGenerationService = contractGenerationService;
             _digitalSignatureService = digitalSignatureService;
             _paymentService = paymentService;
+            _logger = logger;
         }
 
         public async Task ExecuteAsync(
             Guid proposalId,
             CancellationToken cancellationToken = default)
         {
+            _logger.LogInformation(
+                "Starting processing for proposal {ProposalId}.",
+                proposalId);
+
             var proposal = await _proposalRepository.GetByIdAsync(
                 proposalId,
                 cancellationToken);
 
             if (proposal is null)
+            {
+                _logger.LogWarning(
+                    "Proposal {ProposalId} was not found.",
+                    proposalId);
+
                 return;
+            }
 
             if (proposal.Status is ProposalStatus.Approved or ProposalStatus.Rejected)
+            {
+                _logger.LogInformation(
+                    "Proposal {ProposalId} is already finalized with status {Status}. Skipping processing.",
+                    proposal.Id,
+                    proposal.Status);
+
                 return;
+            }
 
             if (proposal.Status == ProposalStatus.Pending)
             {
                 proposal.StartProcessing();
 
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                _logger.LogInformation(
+                    "Proposal {ProposalId} processing started.",
+                    proposal.Id);
             }
 
             if (proposal.ProcessingStep == ProposalProcessingStep.SimulationValidation)
@@ -70,12 +95,22 @@ namespace ConsignedCredit.Application.Proposals.Process
                     proposal.Id,
                     cancellationToken);
 
+                _logger.LogInformation(
+                    "Proposal {ProposalId} simulation validation completed with score {Score}.",
+                    proposal.Id,
+                    score);
+
                 if (score < MinimumApprovalScore)
                 {
                     proposal.Reject(
                         $"Simulation validation rejected with score {score}.");
 
                     await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                    _logger.LogWarning(
+                        "Proposal {ProposalId} rejected during simulation validation with score {Score}.",
+                        proposal.Id,
+                        score);
 
                     return;
                 }
@@ -91,12 +126,22 @@ namespace ConsignedCredit.Application.Proposals.Process
                     proposal.Id,
                     cancellationToken);
 
+                _logger.LogInformation(
+                    "Proposal {ProposalId} risk analysis completed with score {Score}.",
+                    proposal.Id,
+                    score);
+
                 if (score < MinimumApprovalScore)
                 {
                     proposal.Reject(
                         $"Risk analysis rejected with score {score}.");
 
                     await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                    _logger.LogWarning(
+                        "Proposal {ProposalId} rejected during risk analysis with score {Score}.",
+                        proposal.Id,
+                        score);
 
                     return;
                 }
@@ -108,6 +153,10 @@ namespace ConsignedCredit.Application.Proposals.Process
 
             if (proposal.ProcessingStep == ProposalProcessingStep.InssRegistration)
             {
+                _logger.LogInformation(
+                    "Registering proposal {ProposalId} with INSS.",
+                    proposal.Id);
+
                 await _inssRegistrationService.RegisterAsync(
                     proposal.Id,
                     cancellationToken);
@@ -115,10 +164,18 @@ namespace ConsignedCredit.Application.Proposals.Process
                 proposal.CompleteInssRegistration();
 
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                _logger.LogInformation(
+                    "Proposal {ProposalId} successfully registered with INSS.",
+                    proposal.Id);
             }
 
             if (proposal.ProcessingStep == ProposalProcessingStep.ContractGeneration)
             {
+                _logger.LogInformation(
+                    "Generating contract for proposal {ProposalId}.",
+                    proposal.Id);
+
                 await _contractGenerationService.GenerateAsync(
                     proposal.Id,
                     cancellationToken);
@@ -126,10 +183,18 @@ namespace ConsignedCredit.Application.Proposals.Process
                 proposal.CompleteContractGeneration();
 
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                _logger.LogInformation(
+                    "Contract generated for proposal {ProposalId}.",
+                    proposal.Id);
             }
 
             if (proposal.ProcessingStep == ProposalProcessingStep.DigitalSignature)
             {
+                _logger.LogInformation(
+                    "Processing digital signature for proposal {ProposalId}.",
+                    proposal.Id);
+
                 await _digitalSignatureService.SignAsync(
                     proposal.Id,
                     cancellationToken);
@@ -137,10 +202,18 @@ namespace ConsignedCredit.Application.Proposals.Process
                 proposal.CompleteDigitalSignature();
 
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                _logger.LogInformation(
+                    "Digital signature completed for proposal {ProposalId}.",
+                    proposal.Id);
             }
 
             if (proposal.ProcessingStep == ProposalProcessingStep.Payment)
             {
+                _logger.LogInformation(
+                    "Processing payment for proposal {ProposalId}.",
+                    proposal.Id);
+
                 await _paymentService.PayAsync(
                     proposal.Id,
                     cancellationToken);
@@ -148,6 +221,11 @@ namespace ConsignedCredit.Application.Proposals.Process
                 proposal.CompletePayment();
 
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                _logger.LogInformation(
+                    "Proposal {ProposalId} processing completed successfully with status {Status}.",
+                    proposal.Id,
+                    proposal.Status);
             }
         }
     }
