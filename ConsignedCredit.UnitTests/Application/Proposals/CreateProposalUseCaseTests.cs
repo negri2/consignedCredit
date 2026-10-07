@@ -1,8 +1,10 @@
-﻿using ConsignedCredit.Application.Abstractions.Repositories;
+﻿using ConsignedCredit.Application.Abstractions.Persistence;
+using ConsignedCredit.Application.Abstractions.Repositories;
 using ConsignedCredit.Application.Abstractions.Services;
 using ConsignedCredit.Application.Exceptions;
 using ConsignedCredit.Application.Proposals.Create;
 using ConsignedCredit.Domain.Entities;
+using ConsignedCredit.Domain.ValueObjects;
 using Moq;
 using System;
 using System.Collections.Generic;
@@ -16,21 +18,27 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
     public class CreateProposalUseCaseTests
     {
         private readonly Mock<IProposalRepository> _proposalRepository;
+        private readonly Mock<IProponentRepository> _proponentRepository;
         private readonly Mock<IAgentService> _agentService;
         private readonly Mock<IFraudCheckService> _fraudCheckService;
+        private readonly Mock<IUnitOfWork> _unitOfWork;
 
         private readonly CreateProposalUseCase _useCase;
 
         public CreateProposalUseCaseTests()
         {
             _proposalRepository = new Mock<IProposalRepository>();
+            _proponentRepository = new Mock<IProponentRepository>();
             _agentService = new Mock<IAgentService>();
             _fraudCheckService = new Mock<IFraudCheckService>();
+            _unitOfWork = new Mock<IUnitOfWork>();
 
             _useCase = new CreateProposalUseCase(
                 _proposalRepository.Object,
+                _proponentRepository.Object,
                 _agentService.Object,
-                _fraudCheckService.Object);
+                _fraudCheckService.Object,
+                _unitOfWork.Object);
         }
 
         [Fact]
@@ -50,6 +58,12 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
                     request.Cpf,
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(false);
+
+            _proponentRepository
+                .Setup(x => x.GetByCpfAsync(
+                    request.Cpf,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync((Proponent?)null);
 
             _fraudCheckService
                 .Setup(x => x.IsFraudulentAsync(
@@ -76,9 +90,8 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
             Assert.Equal(request.RequestedAmount, savedProposal.Simulation.RequestedAmount);
             Assert.Equal(request.Installments, savedProposal.Simulation.Installments);
 
-            _proposalRepository.Verify(
-                x => x.AddAsync(
-                    It.IsAny<Proposal>(),
+            _unitOfWork.Verify(
+                x => x.SaveChangesAsync(
                     It.IsAny<CancellationToken>()),
                 Times.Once);
         }
@@ -99,9 +112,8 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
 
             Assert.Equal("Agent is not active.", exception.Message);
 
-            _proposalRepository.Verify(
-                x => x.AddAsync(
-                    It.IsAny<Proposal>(),
+            _unitOfWork.Verify(
+                x => x.SaveChangesAsync(
                     It.IsAny<CancellationToken>()),
                 Times.Never);
         }
@@ -131,9 +143,8 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
                 "Proponent already has an open proposal.",
                 exception.Message);
 
-            _proposalRepository.Verify(
-                x => x.AddAsync(
-                    It.IsAny<Proposal>(),
+            _unitOfWork.Verify(
+                x => x.SaveChangesAsync(
                     It.IsAny<CancellationToken>()),
                 Times.Never);
         }
@@ -168,11 +179,87 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
                 "Proponent CPF is blocked by fraud check.",
                 exception.Message);
 
+            _unitOfWork.Verify(
+                x => x.SaveChangesAsync(
+                    It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task Should_Reuse_Existing_Proponent()
+        {
+            var request = CreateValidRequest();
+
+            var address = new Address(
+                "Rua Antiga",
+                "10",
+                "Caxias do Sul",
+                "RS",
+                "95000-000");
+
+            var existingProponent = new Proponent(
+                request.Cpf,
+                request.InssNumber,
+                4000m,
+                request.BirthDate,
+                "old@test.com",
+                "54988888888",
+                address);
+
+            _agentService
+                .Setup(x => x.IsActiveAsync(
+                    request.AgentId,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
+
+            _proposalRepository
+                .Setup(x => x.HasOpenProposalByCpfAsync(
+                    request.Cpf,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(false);
+
+            _fraudCheckService
+                .Setup(x => x.IsFraudulentAsync(
+                    request.Cpf,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(false);
+
+            _proponentRepository
+                .Setup(x => x.GetByCpfAsync(
+                    request.Cpf,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(existingProponent);
+
+            await _useCase.ExecuteAsync(request);
+
+            // Não cria outro proponente
+            _proponentRepository.Verify(
+                x => x.AddAsync(
+                    It.IsAny<Proponent>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Never);
+
+            // Atualiza os dados do proponente existente
+            Assert.Equal(
+                request.RetirementIncome,
+                existingProponent.RetirementIncome);
+
+            Assert.Equal(
+                request.Email,
+                existingProponent.Email);
+
+            // Mas cria uma nova proposta
             _proposalRepository.Verify(
                 x => x.AddAsync(
                     It.IsAny<Proposal>(),
                     It.IsAny<CancellationToken>()),
-                Times.Never);
+                Times.Once);
+
+            // Persiste tudo
+            _unitOfWork.Verify(
+                x => x.SaveChangesAsync(
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
         }
 
         private static CreateProposalRequest CreateValidRequest()

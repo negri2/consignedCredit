@@ -10,6 +10,7 @@ namespace ConsignedCredit.Domain.Entities
 {
     public sealed class Proponent
     {
+        public Guid Id { get; private set; }
         public string Cpf { get; private set; }
         public string InssNumber { get; private set; }
         public decimal RetirementIncome { get; private set; }
@@ -57,6 +58,34 @@ namespace ConsignedCredit.Domain.Entities
             BirthDate = birthDate;
             Email = email;
             Phone = phone;
+        }
+
+        public void Update(
+            string inssNumber,
+            decimal retirementIncome,
+            string email,
+            string phone,
+            Address address)
+        {
+            if (string.IsNullOrWhiteSpace(inssNumber))
+                throw new DomainException("INSS number is required.");
+
+            if (retirementIncome <= 0)
+                throw new DomainException(
+                    "Retirement income must be greater than zero.");
+
+            if (string.IsNullOrWhiteSpace(email))
+                throw new DomainException("Email is required.");
+
+            if (string.IsNullOrWhiteSpace(phone))
+                throw new DomainException("Phone is required.");
+
+            InssNumber = inssNumber;
+            RetirementIncome = retirementIncome;
+            Email = email;
+            Phone = phone;
+            Address = address
+                ?? throw new DomainException("Address is required.");
         }
     }
 }

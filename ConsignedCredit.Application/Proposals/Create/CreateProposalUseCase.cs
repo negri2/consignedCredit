@@ -1,4 +1,5 @@
-﻿using ConsignedCredit.Application.Abstractions.Repositories;
+﻿using ConsignedCredit.Application.Abstractions.Persistence;
+using ConsignedCredit.Application.Abstractions.Repositories;
 using ConsignedCredit.Application.Abstractions.Services;
 using ConsignedCredit.Application.Exceptions;
 using ConsignedCredit.Domain.Entities;
@@ -15,17 +16,23 @@ namespace ConsignedCredit.Application.Proposals.Create
     public sealed class CreateProposalUseCase
     {
         private readonly IProposalRepository _proposalRepository;
+        private readonly IProponentRepository _proponentRepository;
         private readonly IAgentService _agentService;
         private readonly IFraudCheckService _fraudCheckService;
+        private readonly IUnitOfWork _unitOfWork;
 
         public CreateProposalUseCase(
             IProposalRepository proposalRepository,
+            IProponentRepository proponentRepository,
             IAgentService agentService,
-            IFraudCheckService fraudCheckService)
+            IFraudCheckService fraudCheckService,
+            IUnitOfWork unitOfWork)
         {
             _proposalRepository = proposalRepository;
+            _proponentRepository = proponentRepository;
             _agentService = agentService;
             _fraudCheckService = fraudCheckService;
+            _unitOfWork = unitOfWork;
         }
 
         public async Task<Guid> ExecuteAsync(
@@ -64,14 +71,34 @@ namespace ConsignedCredit.Application.Proposals.Create
                 request.State,
                 request.ZipCode);
 
-            var proponent = new Proponent(
+            var proponent = await _proponentRepository.GetByCpfAsync(
                 request.Cpf,
-                request.InssNumber,
-                request.RetirementIncome,
-                request.BirthDate,
-                request.Email,
-                request.Phone,
-                address);
+                cancellationToken);
+
+            if (proponent is null)
+            {
+                proponent = new Proponent(
+                    request.Cpf,
+                    request.InssNumber,
+                    request.RetirementIncome,
+                    request.BirthDate,
+                    request.Email,
+                    request.Phone,
+                    address);
+
+                await _proponentRepository.AddAsync(
+                    proponent,
+                    cancellationToken);
+            }
+            else
+            {
+                proponent.Update(
+                    request.InssNumber,
+                    request.RetirementIncome,
+                    request.Email,
+                    request.Phone,
+                    address);
+            }
 
             var simulation = Simulation.Create(
                 request.RequestedAmount,
@@ -86,6 +113,9 @@ namespace ConsignedCredit.Application.Proposals.Create
 
             await _proposalRepository.AddAsync(
                 proposal,
+                cancellationToken);
+
+            await _unitOfWork.SaveChangesAsync(
                 cancellationToken);
 
             return proposal.Id;
