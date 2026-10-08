@@ -1,5 +1,6 @@
 ﻿using ConsignedCredit.Application.Exceptions;
 using ConsignedCredit.Domain.Exceptions;
+using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
 
 namespace ConsignedCredit.Api.ExceptionHandlers
@@ -13,6 +14,7 @@ namespace ConsignedCredit.Api.ExceptionHandlers
         {
             var statusCode = exception switch
             {
+                ValidationException => StatusCodes.Status400BadRequest,
                 DomainException => StatusCodes.Status400BadRequest,
                 BusinessRuleException => StatusCodes.Status422UnprocessableEntity,
                 _ => StatusCodes.Status500InternalServerError

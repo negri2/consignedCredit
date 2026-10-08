@@ -7,6 +7,8 @@ using ConsignedCredit.Application.Proposals.Create;
 using ConsignedCredit.Application.Proposals.Events;
 using ConsignedCredit.Domain.Entities;
 using ConsignedCredit.Domain.ValueObjects;
+using FluentValidation;
+using FluentValidation.Results;
 using Moq;
 using System;
 using System.Collections.Generic;
@@ -27,6 +29,7 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
         private readonly Mock<IOutbox> _outbox;
         private readonly Mock<IStateLoanRestrictionRepository>
             _stateLoanRestrictionRepository = new();
+        private readonly Mock<IValidator<CreateProposalRequest>> _validator = new();
 
         private readonly CreateProposalUseCase _useCase;
 
@@ -37,6 +40,12 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
                     It.IsAny<string>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync((StateLoanRestriction?)null);
+
+            _validator
+                .Setup(x => x.ValidateAsync(
+                    It.IsAny<CreateProposalRequest>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ValidationResult());
 
             _proposalRepository = new Mock<IProposalRepository>();
             _proponentRepository = new Mock<IProponentRepository>();
@@ -52,7 +61,8 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
                 _fraudCheckService.Object,
                 _unitOfWork.Object,
                 _outbox.Object,
-                _stateLoanRestrictionRepository.Object);
+                _stateLoanRestrictionRepository.Object,
+                _validator.Object);
         }
 
         [Fact]
@@ -400,6 +410,47 @@ namespace ConsignedCredit.UnitTests.Application.Proposals
                     It.IsAny<Proposal>(),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
+        }
+
+        [Fact]
+        public async Task Should_Not_Create_Proposal_When_Request_Validation_Fails()
+        {
+            var request = CreateValidRequest();
+
+            _validator
+                .Setup(x => x.ValidateAsync(
+                    It.IsAny<CreateProposalRequest>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ValidationResult(
+                [
+                    new ValidationFailure("Cpf", "Invalid CPF.")
+                ]));
+
+            await Assert.ThrowsAsync<ValidationException>(
+                () => _useCase.ExecuteAsync(request));
+
+            _agentService.Verify(
+                x => x.IsActiveAsync(
+                    It.IsAny<Guid>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Never);
+
+            _proposalRepository.Verify(
+                x => x.AddAsync(
+                    It.IsAny<Proposal>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Never);
+
+            _outbox.Verify(
+                x => x.AddAsync(
+                    It.IsAny<ProposalCreatedEvent>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Never);
+
+            _unitOfWork.Verify(
+                x => x.SaveChangesAsync(
+                    It.IsAny<CancellationToken>()),
+                Times.Never);
         }
 
         private static CreateProposalRequest CreateValidRequest()

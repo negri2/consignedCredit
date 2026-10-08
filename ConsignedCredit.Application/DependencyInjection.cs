@@ -1,6 +1,7 @@
 ﻿using ConsignedCredit.Application.Proposals.Create;
 using ConsignedCredit.Application.Proposals.Get;
 using ConsignedCredit.Application.Proposals.Process;
+using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
@@ -18,6 +19,7 @@ namespace ConsignedCredit.Application
             services.AddScoped<CreateProposalUseCase>();
             services.AddScoped<ProcessProposalUseCase>();
             services.AddScoped<GetProposalUseCase>();
+            services.AddScoped<IValidator<CreateProposalRequest>, CreateProposalValidator>();
 
             return services;
         }

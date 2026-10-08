@@ -7,6 +7,7 @@ using ConsignedCredit.Application.Proposals.Events;
 using ConsignedCredit.Domain.Entities;
 using ConsignedCredit.Domain.Exceptions;
 using ConsignedCredit.Domain.ValueObjects;
+using FluentValidation;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,6 +25,7 @@ namespace ConsignedCredit.Application.Proposals.Create
         private readonly IUnitOfWork _unitOfWork;
         private readonly IOutbox _outbox;
         private readonly IStateLoanRestrictionRepository _stateLoanRestrictionRepository;
+        private readonly IValidator<CreateProposalRequest> _validator;
 
 
         public CreateProposalUseCase(
@@ -33,7 +35,8 @@ namespace ConsignedCredit.Application.Proposals.Create
             IFraudCheckService fraudCheckService,
             IUnitOfWork unitOfWork,
             IOutbox outbox,
-            IStateLoanRestrictionRepository stateLoanRestrictionRepository)
+            IStateLoanRestrictionRepository stateLoanRestrictionRepository,
+            IValidator<CreateProposalRequest> validator)
         {
             _proposalRepository = proposalRepository;
             _proponentRepository = proponentRepository;
@@ -42,12 +45,20 @@ namespace ConsignedCredit.Application.Proposals.Create
             _unitOfWork = unitOfWork;
             _outbox = outbox;
             _stateLoanRestrictionRepository = stateLoanRestrictionRepository;
+            _validator = validator;
         }
 
         public async Task<CreateProposalResult> ExecuteAsync(
             CreateProposalRequest request,
             CancellationToken cancellationToken = default)
         {
+            var validationResult = await _validator.ValidateAsync(
+                request,
+                cancellationToken);
+
+            if (!validationResult.IsValid)
+                throw new ValidationException(validationResult.Errors);
+
             var agentIsActive = await _agentService.IsActiveAsync(
                 request.AgentId,
                 cancellationToken);
